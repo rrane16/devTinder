@@ -2,6 +2,8 @@ const express = require("express");
 
 const app = express();
 
+const connectDb = require("./config/database");
+
 // app.use("/data", (req, res) => {
 //   console.log("req", req);
 //   res.send("data is fetched from server");
@@ -88,6 +90,16 @@ app
     console.log("event route found");
     res.end("event route found");
   });
-app.listen(3000, () => {
-  console.log("hello");
-});
+
+//connect to data base and if it is succesful then only start listening to server
+
+connectDb()
+  .then(() => {
+    console.log("database connection establihsed");
+    app.listen(3000, () => {
+      console.log("hello");
+    });
+  })
+  .catch((err) => {
+    console.log("database connection error");
+  });
