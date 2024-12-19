@@ -5,8 +5,13 @@ const app = express();
 const connectDb = require("./config/database");
 const User = require("./models/user");
 const mongoose = require("mongoose");
+const { postapivalidation } = require("./utils");
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+const cookieParser = require("cookie-parser");
 
 app.use(express.json());
+app.use(cookieParser());
 
 // app.use("/data", (req, res) => {
 //   console.log("req", req);
@@ -48,26 +53,6 @@ app.use(function (err, req, res, next) {
 app.post("/data", (req, res) => {
   res.send("post call");
 });
-
-// app.post("/signup", async (req, res) => {
-//   //creating instacnce of user model
-
-//   const userObj = {
-//     name: "gudda",
-//     lastName: "singh",
-//     phone: 808939393,
-//     city: "pune",
-//   };
-
-//   const user = new User(userObj);
-
-//   try {
-//     await user.save();
-//     res.send("user added");
-//   } catch (err) {
-//     res.status(400).send("error in adding user", err.message);
-//   }
-// });
 
 //c is optional
 
@@ -142,6 +127,61 @@ app.delete("/deleteUser", async (req, res) => {
   }
 });
 
+app.get("/profile", async (req, res) => {
+  //check if user is authnticated
+
+  try {
+    const cookies = req.cookies;
+
+    const { token } = cookies;
+    console.log("token", token);
+
+    if (!token) {
+      throw new Error("invaliud token");
+    }
+
+    const decodedmessage = await jwt.verify(token, "DEVTINDERKEY34");
+    console.log("decodedemessage", decodedmessage);
+
+    const userId = decodedmessage._id;
+    const user = await User.findById(userId);
+    console.log("user data", user);
+
+    if (!user) {
+      throw new Error("user nopt found");
+    }
+
+    res.send("profile data read");
+  } catch (err) {
+    res.send(400, "error while fetching profile data", err.message);
+  }
+});
+
+app.post("/login", async (req, res) => {
+  try {
+    const { emailId, password } = req.body;
+    const user = await User.findOne({ emailId: emailId });
+    console.log("login user", user);
+    if (!user) {
+      throw new Error("Invalid credentails");
+    }
+    console.log("login user", user);
+    const ispasswordValid = bcrypt.compare(password, user.password);
+    if (ispasswordValid) {
+      // generate token
+
+      const token = await jwt.sign({ _id: user._id }, "DEVTINDERKEY34");
+      console.log("token", token);
+      res.cookie("token", token);
+      res.send("login succesfull");
+    } else {
+      throw new Error("Invalid credentails");
+    }
+  } catch (err) {
+    res.send(400, "invalid credentialssssss");
+  }
+});
+
 app.post("/signup", async (req, res) => {
   //creating instacnce of user model
 
@@ -152,17 +192,29 @@ app.post("/signup", async (req, res) => {
   //   city: "pune",
   // };    //now taking it from api
 
-  console.log(req.body);
-
-  const user = new User(req.body);
-
-  if (Object.keys(req.body).length === 0) {
-    res.send(400, "empty object");
-  }
-
+  //validation of data
   try {
+    postapivalidation(req);
+
+    //encrypting password
+
+    //instaed of sending req.body directly sending only required fields
+    const { name, phone, emailId, password, city } = req.body;
+
+    const hashPassowrd = await bcrypt.hash(password, 10);
+
+    console.log("hashPassowrd", hashPassowrd);
+
+    const user = new User({
+      name,
+      phone,
+      emailId,
+      password: hashPassowrd,
+      city: city,
+    });
     await user.save();
-    res.send("user added");
+    return res.send("user added");
+    console.log("user added");
   } catch (err) {
     console.log("error", err.message);
     res.send(400, "error in saving user", err.message);
@@ -220,7 +272,18 @@ app.get("/feed", async (req, res) => {
   }
 });
 
-app.get("/patch", async (req, res) => {});
+app.patch("/user", async (req, res) => {
+  const userId = req.body.userId;
+  const data = req.body;
+
+  try {
+    const user = await User.findByIdAndUpdate(userId, data);
+    console.log("user updated succesfully");
+    res.send("user updated succesfully");
+  } catch (err) {
+    res.send(400, "user not updated", err.message);
+  }
+});
 
 //connect to data base and if it is succesful then only start listening to server
 
