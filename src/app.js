@@ -1,23 +1,27 @@
 const express = require("express");
-
 const app = express();
-
+const mongoose = require("mongoose");
 const connectDb = require("./config/database");
 const User = require("./models/user");
-const mongoose = require("mongoose");
-const { postapivalidation } = require("./utils");
-const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
+const { userAuth } = require("./middlewares/auth");
+const { sample } = require("./middlewares/sample");
+
 const cookieParser = require("cookie-parser");
 
 app.use(express.json());
 app.use(cookieParser());
+app.use(express.static("images"));
 
-// app.use("/data", (req, res) => {
-//   console.log("req", req);
-//   res.send("data is fetched from server");
-// });
+//importing all the router
+const authRouter = require("./router/auth");
+const profileRouter = require("./router/profile");
+const requestRouter = require("./router/request");
+const userRouter = require("./router/user");
 
+app.use("/", authRouter);
+app.use("/", profileRouter);
+app.use("/", requestRouter);
+app.use("/", sample);
 //commenting below code becuase it will not let other router work all cases will fall in this case
 
 // app.use((req, res) => {
@@ -28,18 +32,26 @@ app.all("/data/:id", (req, res) => {
   console.log("req.params", req.params);
   console.log("hostname", req.hostname);
   console.log("originalUrl", req.originalUrl);
+  console.log("reqcookies", req.cookies);
+  console.log("req.fresh", req.fresh);
+  console.log("req.path", req.path);
+  console.log("req.protocol", req.protocol);
 
   res.send("generic fucntion for all methods");
 });
+
+//res.send() and next combination present and there practice.
 
 app.get(
   "/data",
   (req, res, next) => {
     //res.send("get call");
     next();
+    next();
   },
   (req, res, next) => {
     console.log("second call");
+    throw new Error("bad request");
     //res.send("get call second function");
     //next();
   }
@@ -48,10 +60,6 @@ app.get(
 app.use(function (err, req, res, next) {
   console.error(err.stack);
   res.status(500).send("Something broke!");
-});
-
-app.post("/data", (req, res) => {
-  res.send("post call");
 });
 
 //c is optional
@@ -124,100 +132,6 @@ app.delete("/deleteUser", async (req, res) => {
     res.send("user deleted succesfully");
   } catch (err) {
     res.status(400).send(err.message);
-  }
-});
-
-app.get("/profile", async (req, res) => {
-  //check if user is authnticated
-
-  try {
-    const cookies = req.cookies;
-
-    const { token } = cookies;
-    console.log("token", token);
-
-    if (!token) {
-      throw new Error("invaliud token");
-    }
-
-    const decodedmessage = await jwt.verify(token, "DEVTINDERKEY34");
-    console.log("decodedemessage", decodedmessage);
-
-    const userId = decodedmessage._id;
-    const user = await User.findById(userId);
-    console.log("user data", user);
-
-    if (!user) {
-      throw new Error("user nopt found");
-    }
-
-    res.send("profile data read");
-  } catch (err) {
-    res.send(400, "error while fetching profile data", err.message);
-  }
-});
-
-app.post("/login", async (req, res) => {
-  try {
-    const { emailId, password } = req.body;
-    const user = await User.findOne({ emailId: emailId });
-    console.log("login user", user);
-    if (!user) {
-      throw new Error("Invalid credentails");
-    }
-    console.log("login user", user);
-    const ispasswordValid = bcrypt.compare(password, user.password);
-    if (ispasswordValid) {
-      // generate token
-
-      const token = await jwt.sign({ _id: user._id }, "DEVTINDERKEY34");
-      console.log("token", token);
-      res.cookie("token", token);
-      res.send("login succesfull");
-    } else {
-      throw new Error("Invalid credentails");
-    }
-  } catch (err) {
-    res.send(400, "invalid credentialssssss");
-  }
-});
-
-app.post("/signup", async (req, res) => {
-  //creating instacnce of user model
-
-  // const userObj = {
-  //   name: "guddllla",
-  //   lastName: "singh",
-  //   phone: 808939393,
-  //   city: "pune",
-  // };    //now taking it from api
-
-  //validation of data
-  try {
-    postapivalidation(req);
-
-    //encrypting password
-
-    //instaed of sending req.body directly sending only required fields
-    const { name, phone, emailId, password, city } = req.body;
-
-    const hashPassowrd = await bcrypt.hash(password, 10);
-
-    console.log("hashPassowrd", hashPassowrd);
-
-    const user = new User({
-      name,
-      phone,
-      emailId,
-      password: hashPassowrd,
-      city: city,
-    });
-    await user.save();
-    return res.send("user added");
-    console.log("user added");
-  } catch (err) {
-    console.log("error", err.message);
-    res.send(400, "error in saving user", err.message);
   }
 });
 
@@ -295,5 +209,5 @@ connectDb()
     });
   })
   .catch((err) => {
-    console.log("database connection error");
+    console.log("database connection error", err);
   });
